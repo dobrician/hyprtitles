@@ -70,8 +70,17 @@ hl.config({ plugin = { hyprtitles = {
   show_fullscreen = false,
   only_active = false,
   glow = true,             -- extend the window's glow around the pill
+  inside = "auto",         -- tab inside the window: auto, always, never
 } } })
 ```
+
+### No room above
+
+When there is no room above a window, because it touches the top of the screen
+or a bar, or a tiled window sits right above it with no gaps, the label moves
+inside the window: a tab hanging from the top border, rounded at the bottom
+and joined to the border with inner curves. `inside = "always"` always draws
+it that way, `inside = "never"` never does. The tab has no glow.
 
 ### Glow
 

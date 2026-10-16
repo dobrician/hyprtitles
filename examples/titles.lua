@@ -96,6 +96,7 @@ if hl.plugin.hyprtitles ~= nil then
         show_fullscreen = false,
         only_active = false,
         glow = true, -- extend the window's glow (decoration:shadow) around the pill
+        inside = "auto", -- tab inside the window when there is no room above: auto, always, never
       },
     },
   })

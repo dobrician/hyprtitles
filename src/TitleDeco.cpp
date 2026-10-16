@@ -4,6 +4,7 @@
 #include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRule.hpp>
 #include <hyprland/src/helpers/MiscFunctions.hpp>
@@ -13,6 +14,8 @@
 
 #include <algorithm>
 #include <cmath>
+
+#include <cairo/cairo.h>
 
 #include "TitlePassElement.hpp"
 
@@ -122,9 +125,10 @@ void CTitleDeco::damageEntire() {
     if (!PWINDOW || !validMapped(PWINDOW))
         return;
 
+    // the tab's inverted corners reach out by at most half its height on each side
     const auto BOX = pillBoxGlobal(PWINDOW);
     if (BOX.w > 0 && BOX.h > 0)
-        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + glowReach()));
+        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + (m_inside ? BOX.h / 2.0 : glowReach())));
 }
 
 void CTitleDeco::setLabel(SLabel&& label) {
@@ -159,6 +163,8 @@ void CTitleDeco::onConfigReloaded() {
     m_texKey       = {};
     m_labelDirty   = true;
     m_lastOverhang = -1;
+    m_tabTex       = nullptr;
+    m_tabKey       = {};
     g_pDecorationPositioner->repositionDeco(this);
     damageEntire();
 }
@@ -302,8 +308,8 @@ CBox CTitleDeco::pillBoxGlobal(PHLWINDOW w) {
     const double PILLW = m_textTex->m_size.x / SCALE + 2 * PADX;
     const double PILLH = m_textTex->m_size.y / SCALE + 2 * PADY;
 
-    // vertically centered on the top border line
-    const double Y = WINBOX.y - BORDER / 2.0 - PILLH / 2.0 + g_pGlobalState->config.offsetY->value();
+    // vertically centered on the top border line, or, inside, hanging from its inner edge
+    const double Y = m_inside ? WINBOX.y : WINBOX.y - BORDER / 2.0 - PILLH / 2.0 + g_pGlobalState->config.offsetY->value();
 
     double       x     = 0;
     const auto   ALIGN = g_pGlobalState->config.align->value();
@@ -343,18 +349,30 @@ void CTitleDeco::renderPass(PHLMONITOR pMonitor, const float& a) {
     if (!m_textTex || m_textTex->m_texID == 0)
         return;
 
+    if (const bool INSIDE = wantsInside(PWINDOW); INSIDE != m_inside) {
+        damageEntire();
+        m_inside = INSIDE;
+        damageEntire();
+    }
+
     CBox box = pillBoxGlobal(PWINDOW);
     box.translate(PWINDOW->m_floatingOffset - pMonitor->m_position).scale(SCALE).round();
 
     if (box.w < 1 || box.h < 1)
         return;
 
-    renderGlow(PWINDOW, pMonitor, box, a);
+    if (m_inside) {
+        // bottom corners like the window's, capped so short tabs stay tabs
+        const int R = std::round(std::min(std::max<double>(PWINDOW->rounding(), 3.0), box.h / 2.0 / SCALE) * SCALE);
+        renderTab(box, backgroundColor(PWINDOW), R, a);
+    } else {
+        renderGlow(PWINDOW, pMonitor, box, a);
 
-    CHyprColor bg = backgroundColor(PWINDOW);
-    bg.a *= a;
+        CHyprColor bg = backgroundColor(PWINDOW);
+        bg.a *= a;
 
-    g_pHyprOpenGL->renderRect(box, bg, {.round = static_cast<int>(std::floor(box.h / 2.0)), .roundingPower = 2.F});
+        g_pHyprOpenGL->renderRect(box, bg, {.round = static_cast<int>(std::floor(box.h / 2.0)), .roundingPower = 2.F});
+    }
 
     CBox textBox = {box.x + (box.w - m_textTex->m_size.x) / 2.0, box.y + (box.h - m_textTex->m_size.y) / 2.0, m_textTex->m_size.x, m_textTex->m_size.y};
     textBox.round(); // whole pixels, otherwise the text is sampled at a half-pixel offset and blurs
@@ -401,4 +419,100 @@ void CTitleDeco::renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBo
         g_pHyprRenderer->drawShadow(box, ROUND, 2.F, RANGE, grad, a);
 
     renderData.currentWindow = PREV;
+}
+
+bool CTitleDeco::wantsInside(PHLWINDOW w) {
+    const auto MODE = g_pGlobalState->config.inside->value();
+    if (MODE == "always")
+        return true;
+    if (MODE != "auto")
+        return false;
+
+    const auto PMONITOR = w->m_monitor.lock();
+    if (!PMONITOR || !m_textTex || m_texKey.scale <= 0)
+        return false;
+
+    // Decide on where the window is going, not where it is mid-animation, so the label
+    // doesn't flip between the two places while a window slides or resizes.
+    const auto   GOAL   = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+    const double BORDER = w->getRealBorderSize();
+    const double PADY   = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingY->value());
+    const double PILLH  = m_textTex->m_size.y / m_texKey.scale + 2 * PADY;
+    const double TOP    = GOAL.y - BORDER / 2.0 - PILLH / 2.0 + g_pGlobalState->config.offsetY->value();
+
+    // past the top of the usable area: off screen, or over a bar
+    if (TOP < PMONITOR->logicalBoxMinusReserved().y)
+        return true;
+
+    if (w->m_isFloating)
+        return false;
+
+    // over a tiled neighbour right above (gaps smaller than half the pill)
+    const auto   CUR    = pillBoxGlobal(w);
+    const double OFFX   = CUR.x - w->getWindowMainSurfaceBox().x;
+    const double LEFT   = GOAL.x + OFFX;
+    const double RIGHT  = LEFT + CUR.w;
+
+    for (const auto& other : Desktop::windowState()->windows()) {
+        if (other == w || !other->m_isMapped || other->isHidden() || other->m_isFloating || other->m_workspace != w->m_workspace)
+            continue;
+
+        const auto   OB      = other->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+        const double OBORDER = other->getRealBorderSize();
+        const double BOTTOM  = OB.y + OB.h + OBORDER;
+
+        if (OB.y >= GOAL.y || BOTTOM <= TOP)
+            continue;
+        if (OB.x - OBORDER >= RIGHT || OB.x + OB.w + OBORDER <= LEFT)
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+void CTitleDeco::renderTab(const CBox& body, const CHyprColor& color, int r, float a) {
+    // The tab hangs from the top border: flat on top, rounded at the bottom, and joined
+    // to the border by inverted corners of the same radius on either side. Drawn with
+    // cairo once per size and color; only a border color fade redraws it per frame.
+    const int W = std::round(body.w) + 2 * r;
+    const int H = std::round(body.h);
+    if (W < 1 || H < 1)
+        return;
+
+    if (!m_tabTex || m_tabKey.w != W || m_tabKey.h != H || m_tabKey.r != r || m_tabKey.color != color) {
+        m_tabKey = {.w = W, .h = H, .r = r, .color = color};
+
+        auto* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, W, H);
+        auto* cr      = cairo_create(surface);
+
+        const double RR = std::min<double>(r, H / 2.0);
+        const double X0 = r, X1 = W - r;
+
+        cairo_move_to(cr, 0, 0);
+        cairo_line_to(cr, W, 0);
+        cairo_arc_negative(cr, W, r, r, -M_PI / 2.0, M_PI); // inverted corner, right
+        cairo_line_to(cr, X1, H - RR);
+        cairo_arc(cr, X1 - RR, H - RR, RR, 0, M_PI / 2.0);
+        cairo_line_to(cr, X0 + RR, H);
+        cairo_arc(cr, X0 + RR, H - RR, RR, M_PI / 2.0, M_PI);
+        cairo_line_to(cr, X0, r);
+        cairo_arc_negative(cr, 0, r, r, 0, -M_PI / 2.0); // inverted corner, left
+        cairo_close_path(cr);
+
+        cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
+        cairo_fill(cr);
+        cairo_surface_flush(surface);
+
+        m_tabTex = g_pHyprRenderer->createTexture(surface);
+
+        cairo_destroy(cr);
+        cairo_surface_destroy(surface);
+    }
+
+    if (!m_tabTex || m_tabTex->m_texID == 0)
+        return;
+
+    g_pHyprOpenGL->renderTexture(m_tabTex, CBox{body.x - r, body.y, (double)W, (double)H}, {.a = a});
 }

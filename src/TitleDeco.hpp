@@ -68,6 +68,15 @@ class CTitleDeco : public IHyprWindowDecoration {
 
     double     m_lastOverhang = -1;
 
+    // inside: the label hangs from the top border into the window as a tab, used when
+    // there is no room above the window (no gaps, or a bar or another window right above)
+    bool                 m_inside = false;
+    SP<Render::ITexture> m_tabTex;
+    struct {
+        int        w = 0, h = 0, r = 0;
+        CHyprColor color;
+    } m_tabKey;
+
     bool       shouldShow(PHLWINDOW w);
     bool       isActive(PHLWINDOW w);
     CHyprColor backgroundColor(PHLWINDOW w);
@@ -75,6 +84,8 @@ class CTitleDeco : public IHyprWindowDecoration {
     int        maxTextWidth(PHLWINDOW w);
     void       ensureTexture(PHLWINDOW w, float scale);
     CBox       pillBoxGlobal(PHLWINDOW w);
+    bool       wantsInside(PHLWINDOW w);
+    void       renderTab(const CBox& body, const CHyprColor& color, int r, float a);
     double     overhang();
 
     void       renderPass(PHLMONITOR, float const& a);

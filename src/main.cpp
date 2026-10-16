@@ -284,10 +284,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     c.inactiveText   = makeShared<Config::Values::CColorValue>("plugin:hyprtitles:col.inactive_text", "Text color of other windows; 0 = auto contrast", 0);
     c.showFullscreen = makeShared<Config::Values::CBoolValue>("plugin:hyprtitles:show_fullscreen", "Draw the pill on fullscreen windows", false);
     c.onlyActive     = makeShared<Config::Values::CBoolValue>("plugin:hyprtitles:only_active", "Draw the pill only on the focused window", false);
+    c.inside         = makeShared<Config::Values::CStringValue>("plugin:hyprtitles:inside",
+                                                                "Hang the label inside the window as a tab: auto (when there is no room above), always or never", "auto");
     c.glow           = makeShared<Config::Values::CBoolValue>("plugin:hyprtitles:glow", "Extend the window's glow (decoration:shadow) around the pill", true);
 
     for (const auto& v : std::initializer_list<SP<Config::Values::IValue>>{c.enabled, c.font, c.textSize, c.textWeight, c.paddingX, c.paddingY, c.maxWidth, c.offsetX, c.offsetY,
-                                                                           c.align, c.activeBg, c.inactiveBg, c.activeText, c.inactiveText, c.showFullscreen, c.onlyActive, c.glow}) {
+                                                                           c.align, c.activeBg, c.inactiveBg, c.activeText, c.inactiveText, c.showFullscreen, c.onlyActive, c.glow, c.inside}) {
         HyprlandAPI::addConfigValueV2(PHANDLE, v);
     }
 
