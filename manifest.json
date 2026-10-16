@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.dobrician.hyprtitles",
+  "name": "hyprtitles",
+  "version": "0.2.0",
+  "author": "dobrician",
+  "description": "Window titles in a pill on the window border. Follows your theme and glow, sits on any edge, turns into tabs when there is no room, and takes its text from a Lua function.",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "omarchy/Service.qml"
+  }
+}

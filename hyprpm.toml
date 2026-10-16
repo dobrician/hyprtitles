@@ -3,7 +3,7 @@ name = "hyprtitles"
 authors = ["dc"]
 
 [hyprtitles]
-description = "Window titles in a pill on the top border"
+description = "Window titles in a pill on the window border"
 authors = ["dc"]
 output = "hyprtitles.so"
 build = [

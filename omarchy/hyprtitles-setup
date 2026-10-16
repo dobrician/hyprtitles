@@ -1,0 +1,116 @@
+#!/bin/bash
+# Builds, loads and removes the hyprtitles Hyprland plugin through hyprpm.
+#
+#   hyprtitles-setup ensure     load it; open a terminal to build it when needed (run by the Omarchy service)
+#   hyprtitles-setup install    build, enable and load it, then offer a starter config
+#   hyprtitles-setup rebuild    rebuild it for the running Hyprland and load it
+#   hyprtitles-setup uninstall  unload it and remove it from hyprpm
+
+set -o pipefail
+
+PLUGIN_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SELF="$PLUGIN_DIR/omarchy/hyprtitles-setup"
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/hyprtitles
+HYPR_CONFIG=$HOME/.config/hypr
+
+loaded() { hyprctl plugin list 2>/dev/null | grep -q "Plugin hyprtitles by"; }
+registered() { hyprpm list 2>/dev/null | grep -q "Plugin hyprtitles"; }
+revision() { git -C "$PLUGIN_DIR" rev-parse HEAD 2>/dev/null || echo unknown; }
+hyprland_commit() { hyprctl version -j 2>/dev/null | jq -r '.commit // "unknown"'; }
+
+# what the plugin was last built from, and for which Hyprland
+build_key() { echo "$(revision) $(hyprland_commit)"; }
+mark_built() { mkdir -p "$STATE" && build_key >"$STATE/built"; }
+
+fail() {
+  echo
+  echo "hyprtitles: $*" >&2
+  exit 1
+}
+
+# Opens a terminal for a step that needs the user (sudo, or a question), at most once
+# per plugin and Hyprland version, so a declined or failed build doesn't come back at
+# every login. After that, a notification says how to run it.
+ask_once() {
+  local key
+  key="$1 $(build_key)"
+  mkdir -p "$STATE"
+  if [[ $(cat "$STATE/asked" 2>/dev/null) == "$key" ]]; then
+    notify-send -a hyprtitles "hyprtitles is not loaded" "Build it with: bash $SELF $1"
+    return
+  fi
+  echo "$key" >"$STATE/asked"
+  omarchy-launch-floating-terminal-with-presentation "bash '$SELF' $1"
+}
+
+# hyprpm builds the Hyprland headers with these; base-devel, git and jq come with Omarchy
+build_tools() {
+  local missing=() tool
+  for tool in cmake cpio pkgconf; do
+    command -v "$tool" >/dev/null || missing+=("$tool")
+  done
+  ((${#missing[@]})) || return 0
+  echo "hyprpm needs ${missing[*]} to build the Hyprland headers."
+  sudo pacman -S --needed "${missing[@]}" || fail "could not install ${missing[*]}"
+}
+
+offer_config() {
+  [[ -f $HYPR_CONFIG/titles.lua || ! -f $HYPR_CONFIG/hyprland.lua ]] && return
+  echo
+  if gum confirm "Add a starter config at ~/.config/hypr/titles.lua and load it from hyprland.lua?"; then
+    cp "$PLUGIN_DIR/examples/titles.lua" "$HYPR_CONFIG/titles.lua"
+    grep -q 'require("hypr.titles")' "$HYPR_CONFIG/hyprland.lua" ||
+      printf '\nrequire("hypr.titles")\n' >>"$HYPR_CONFIG/hyprland.lua"
+    echo "Edit ~/.config/hypr/titles.lua to change what the titles say and where they sit."
+  fi
+}
+
+case ${1:-} in
+ensure)
+  if ! registered; then
+    ask_once install
+  elif [[ $(cat "$STATE/built" 2>/dev/null) != "$(build_key)" ]]; then
+    ask_once rebuild
+  else
+    loaded || hyprpm reload -n >/dev/null 2>&1
+    loaded || ask_once rebuild
+  fi
+  ;;
+install)
+  echo "hyprtitles is a Hyprland plugin. hyprpm builds it against your Hyprland,"
+  echo "and asks for sudo once to install the Hyprland headers."
+  echo
+  build_tools
+  hyprpm update || fail "hyprpm update failed"
+  registered || hyprpm add "$PLUGIN_DIR" || fail "hyprpm add failed"
+  hyprpm enable hyprtitles || fail "hyprpm enable failed"
+  hyprpm reload || fail "hyprpm reload failed"
+  mark_built
+  offer_config
+  echo
+  echo "hyprtitles is loaded."
+  ;;
+rebuild)
+  build_tools
+  hyprpm update || fail "hyprpm update failed"
+  hyprpm enable hyprtitles || fail "hyprpm enable failed"
+  hyprpm reload || fail "hyprpm reload failed"
+  mark_built
+  echo
+  echo "hyprtitles is rebuilt and loaded."
+  ;;
+uninstall)
+  if registered; then
+    hyprpm disable hyprtitles
+    hyprpm remove hyprtitles
+  fi
+  rm -rf "$STATE"
+  echo
+  echo "hyprtitles is removed. ~/.config/hypr/titles.lua and the require(\"hypr.titles\")"
+  echo "line in hyprland.lua are left alone; delete them if you don't want them."
+  ;;
+*)
+  sed -n '2,8p' "$SELF" | sed 's/^# \{0,1\}//'
+  exit 2
+  ;;
+esac

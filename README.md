@@ -1,7 +1,7 @@
 # hyprtitles
 
 A Hyprland plugin that draws each window's title in a small pill sitting on the
-top border, in the right corner by default. The pill takes the window's border
+window border, top right by default, or on any other edge and corner. The pill takes the window's border
 color, so the focused window's label changes color along with its border, and it
 follows the theme.
 
@@ -22,7 +22,40 @@ from [hyprbars](https://github.com/hyprwm/hyprland-plugins/tree/main/hyprbars).
 
 ## Install
 
-With hyprpm:
+### On Omarchy
+
+```sh
+omarchy plugin add https://github.com/dobrician/hyprtitles --enable
+```
+
+Or find it in the Omarchy plugin marketplace. The plugin is a small Omarchy
+service around the Hyprland plugin: the first time it runs it opens a terminal
+that builds hyprtitles with hyprpm (hyprpm asks for sudo once, to install the
+Hyprland headers), loads it, and offers to add a starter
+`~/.config/hypr/titles.lua`. After that it loads the plugin at every login, and
+when Hyprland or hyprtitles is updated it opens the terminal again to rebuild.
+You can run the steps yourself:
+
+```sh
+bash ~/.config/omarchy/plugins/io.github.dobrician.hyprtitles/omarchy/hyprtitles-setup install
+bash ~/.config/omarchy/plugins/io.github.dobrician.hyprtitles/omarchy/hyprtitles-setup rebuild
+```
+
+To remove it:
+
+```sh
+bash ~/.config/omarchy/plugins/io.github.dobrician.hyprtitles/omarchy/hyprtitles-setup uninstall
+omarchy plugin remove io.github.dobrician.hyprtitles
+```
+
+The uninstall step unloads the plugin and removes it from hyprpm. It leaves
+`~/.config/hypr/titles.lua` and the `require("hypr.titles")` line in
+`hyprland.lua` in place; delete them yourself if you no longer want them.
+
+hyprpm also needs `cmake`, `cpio` and `pkgconf` to build the Hyprland
+headers; the install step offers to install whichever are missing with pacman.
+
+### With hyprpm
 
 ```sh
 hyprpm update                  # builds headers for the running Hyprland, once
