@@ -69,8 +69,17 @@ hl.config({ plugin = { hyprtitles = {
   },
   show_fullscreen = false,
   only_active = false,
+  glow = true,             -- extend the window's glow around the pill
 } } })
 ```
+
+### Glow
+
+If your windows glow (`decoration:shadow`), the pill gets the same glow: same
+color, range, power, offset and fade, and only when the window has one, so a
+transparent `color_inactive` means no glow on inactive pills. Like the window's
+own glow, it stays outside the window. `glow = false` turns it off; a `sharp`
+shadow is not copied.
 
 ### What the pill says
 

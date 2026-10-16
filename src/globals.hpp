@@ -37,7 +37,7 @@ struct SGlobalState {
     UP<SEventLoopDoLaterLock> refreshLock;
 
     struct {
-        SP<Config::Values::CBoolValue>       enabled, showFullscreen, onlyActive;
+        SP<Config::Values::CBoolValue>       enabled, showFullscreen, onlyActive, glow;
         SP<Config::Values::CStringValue>     font, align;
         SP<Config::Values::CIntValue>        textSize, paddingX, paddingY, maxWidth, offsetX, offsetY;
         SP<Config::Values::CFontWeightValue> textWeight;

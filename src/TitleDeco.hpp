@@ -20,6 +20,9 @@ struct SLabel {
     bool                      operator==(const SLabel&) const = default;
 };
 
+// how far the pill glow reaches past the pill (logical px), 0 without a glow
+double glowReach();
+
 class CTitleDeco : public IHyprWindowDecoration {
   public:
     CTitleDeco(PHLWINDOW);
@@ -75,6 +78,7 @@ class CTitleDeco : public IHyprWindowDecoration {
     double     overhang();
 
     void       renderPass(PHLMONITOR, float const& a);
+    void       renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBox, float a);
 
     friend class CTitlePassElement;
 };

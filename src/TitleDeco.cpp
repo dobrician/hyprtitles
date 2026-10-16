@@ -1,6 +1,7 @@
 #include "TitleDeco.hpp"
 
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -27,6 +28,43 @@ static CHyprColor lerpColor(const CHyprColor& from, const CHyprColor& to, float 
 
 static CHyprColor firstColor(const Config::CGradientValueData& grad) {
     return grad.m_colors.empty() ? CHyprColor{0.5F, 0.5F, 0.5F, 1.F} : grad.m_colors.front();
+}
+
+static bool hasAlpha(const Config::CGradientValueData& grad) {
+    return std::ranges::any_of(grad.m_colors, [](const auto& c) { return c.a > 0.001F; });
+}
+
+// The window's glow is Hyprland's decoration:shadow. These are the settings the pill glow
+// copies; range is 0 when there is no glow to extend.
+struct SGlowConfig {
+    int      range = 0;
+    float    scale = 1.F;
+    Vector2D offset;
+};
+
+static SGlowConfig glowConfig() {
+    if (!g_pGlobalState->config.glow->value())
+        return {};
+
+    const CConfigValue<Config::INTEGER> ENABLED("decoration:shadow:enabled");
+    const CConfigValue<Config::INTEGER> SHARP("decoration:shadow:sharp");
+    const CConfigValue<Config::INTEGER> RANGE("decoration:shadow:range");
+    const CConfigValue<Config::FLOAT>   SCALE("decoration:shadow:scale");
+    const CConfigValue<Config::VEC2>    OFFSET("decoration:shadow:offset");
+
+    // a sharp shadow is a flat offset copy of the window, not a glow
+    if (*ENABLED != 1 || *SHARP || *RANGE <= 0)
+        return {};
+
+    return {.range = static_cast<int>(*RANGE), .scale = std::clamp(*SCALE, 0.F, 1.F), .offset = Vector2D{(*OFFSET).x, (*OFFSET).y}};
+}
+
+// how far the glow reaches past the pill, for damage and extents (logical px)
+double glowReach() {
+    const auto GLOW = glowConfig();
+    if (GLOW.range <= 0)
+        return 0;
+    return GLOW.range + std::max(std::abs(GLOW.offset.x), std::abs(GLOW.offset.y));
 }
 
 CTitleDeco::CTitleDeco(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_window(pWindow) {
@@ -86,7 +124,7 @@ void CTitleDeco::damageEntire() {
 
     const auto BOX = pillBoxGlobal(PWINDOW);
     if (BOX.w > 0 && BOX.h > 0)
-        g_pHyprRenderer->damageBox(BOX.copy().expand(2));
+        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + glowReach()));
 }
 
 void CTitleDeco::setLabel(SLabel&& label) {
@@ -246,7 +284,7 @@ double CTitleDeco::overhang() {
     const double PILLH  = TEXTH + 2 * std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingY->value());
     const double BORDER = PWINDOW->getRealBorderSize();
 
-    return std::max(0.0, BORDER / 2.0 + PILLH / 2.0 - g_pGlobalState->config.offsetY->value()) + 2;
+    return std::max(0.0, BORDER / 2.0 + PILLH / 2.0 - g_pGlobalState->config.offsetY->value()) + 2 + glowReach();
 }
 
 CBox CTitleDeco::pillBoxGlobal(PHLWINDOW w) {
@@ -311,6 +349,8 @@ void CTitleDeco::renderPass(PHLMONITOR pMonitor, const float& a) {
     if (box.w < 1 || box.h < 1)
         return;
 
+    renderGlow(PWINDOW, pMonitor, box, a);
+
     CHyprColor bg = backgroundColor(PWINDOW);
     bg.a *= a;
 
@@ -320,4 +360,45 @@ void CTitleDeco::renderPass(PHLMONITOR pMonitor, const float& a) {
     textBox.round(); // whole pixels, otherwise the text is sampled at a half-pixel offset and blurs
 
     g_pHyprOpenGL->renderTexture(m_textTex, textBox, {.a = a});
+}
+
+void CTitleDeco::renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBox, float a) {
+    // the same checks the window's own shadow makes, so the pill glows exactly when the
+    // window does: inactive windows with a transparent shadow color get none
+    const auto GLOW = glowConfig();
+    if (GLOW.range <= 0 || w->m_ruleApplicator->noShadow().valueOrDefault())
+        return;
+
+    const bool FADING = w->m_shadowFadeAnimationProgress && w->m_shadowFadeAnimationProgress->isBeingAnimated();
+    if (!hasAlpha(w->m_realShadowColor) && !(FADING && hasAlpha(w->m_realShadowColorPrevious)))
+        return;
+
+    const float SCALE = pMonitor->m_scale;
+    const int   RANGE = std::round(GLOW.range * SCALE);
+
+    CBox        box = pillBox;
+    box.expand(RANGE).scaleFromCenter(GLOW.scale).translate(GLOW.offset * SCALE).round();
+    if (box.w < 1 || box.h < 1)
+        return;
+
+    auto grad = w->m_realShadowColor;
+    if (w->m_shadowAngleAnimationProgress && w->m_shadowAngleAnimationProgress->enabled()) {
+        grad.m_angle = normalizeAngleRad(grad.m_angle + w->m_shadowAngleAnimationProgress->value() * M_PI * 2);
+        if (FADING)
+            w->m_realShadowColorPrevious.m_angle = grad.m_angle;
+    }
+
+    // with currentWindow set, the shadow shader cuts the window out, so the glow stays
+    // outside the window like the window's own does and doesn't tint its content
+    auto&      renderData = g_pHyprRenderer->m_renderData;
+    const auto PREV       = renderData.currentWindow;
+    renderData.currentWindow = m_window;
+
+    const int ROUND = std::floor(pillBox.h / 2.0);
+    if (FADING)
+        g_pHyprRenderer->drawShadow(box, ROUND, 2.F, RANGE, w->m_realShadowColorPrevious, grad, w->m_shadowFadeAnimationProgress->value(), a);
+    else
+        g_pHyprRenderer->drawShadow(box, ROUND, 2.F, RANGE, grad, a);
+
+    renderData.currentWindow = PREV;
 }

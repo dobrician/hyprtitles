@@ -33,5 +33,5 @@ std::optional<CBox> CTitlePassElement::boundingBox() {
     if (box.w <= 0 || box.h <= 0)
         return std::nullopt;
 
-    return box.translate(PWINDOW->m_floatingOffset - PMONITOR->m_position).expand(2);
+    return box.translate(PWINDOW->m_floatingOffset - PMONITOR->m_position).expand(2 + glowReach());
 }

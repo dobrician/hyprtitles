@@ -95,6 +95,7 @@ if hl.plugin.hyprtitles ~= nil then
         -- col = { active_bg = "rgb(f5a3c7)", inactive_bg = 0, active_text = 0, inactive_text = 0 },
         show_fullscreen = false,
         only_active = false,
+        glow = true, -- extend the window's glow (decoration:shadow) around the pill
       },
     },
   })
