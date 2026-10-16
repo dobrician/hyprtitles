@@ -37,15 +37,15 @@ when Hyprland or hyprtitles is updated it opens the terminal again to rebuild.
 You can run the steps yourself:
 
 ```sh
-bash ~/.config/omarchy/plugins/io.github.dobrician.hyprtitles/omarchy/hyprtitles-setup install
-bash ~/.config/omarchy/plugins/io.github.dobrician.hyprtitles/omarchy/hyprtitles-setup rebuild
+bash ~/.config/omarchy/plugins/dc.hyprtitles/omarchy/hyprtitles-setup install
+bash ~/.config/omarchy/plugins/dc.hyprtitles/omarchy/hyprtitles-setup rebuild
 ```
 
 To remove it:
 
 ```sh
-bash ~/.config/omarchy/plugins/io.github.dobrician.hyprtitles/omarchy/hyprtitles-setup uninstall
-omarchy plugin remove io.github.dobrician.hyprtitles
+bash ~/.config/omarchy/plugins/dc.hyprtitles/omarchy/hyprtitles-setup uninstall
+omarchy plugin remove dc.hyprtitles
 ```
 
 The uninstall step unloads the plugin and removes it from hyprpm. It leaves

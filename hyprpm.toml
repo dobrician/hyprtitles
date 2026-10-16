@@ -1,10 +1,10 @@
 [repository]
 name = "hyprtitles"
-authors = ["dc"]
+authors = ["Ciprian Dobrea"]
 
 [hyprtitles]
 description = "Window titles in a pill on the window border"
-authors = ["dc"]
+authors = ["Ciprian Dobrea"]
 output = "hyprtitles.so"
 build = [
     "make all",
