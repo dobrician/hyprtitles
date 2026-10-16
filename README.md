@@ -18,7 +18,7 @@ With hyprpm:
 
 ```sh
 hyprpm update                  # builds headers for the running Hyprland, once
-hyprpm add https://github.com/<you>/hyprtitles   # or a local path to this repo
+hyprpm add https://github.com/dobrician/hyprtitles   # or a local path to this repo
 hyprpm enable hyprtitles
 hyprpm reload -n
 ```
