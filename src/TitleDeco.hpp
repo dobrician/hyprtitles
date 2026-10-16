@@ -89,7 +89,7 @@ class CTitleDeco : public IHyprWindowDecoration {
     double     overhang();
 
     void       renderPass(PHLMONITOR, float const& a);
-    void       renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBox, float a);
+    void       renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBox, int round, float a);
 
     friend class CTitlePassElement;
 };

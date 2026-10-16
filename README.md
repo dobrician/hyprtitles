@@ -80,7 +80,8 @@ When there is no room above a window, because it touches the top of the screen
 or a bar, or a tiled window sits right above it with no gaps, the label moves
 inside the window: a tab hanging from the top border, rounded at the bottom
 and joined to the border with inner curves. `inside = "always"` always draws
-it that way, `inside = "never"` never does. The tab has no glow.
+it that way, `inside = "never"` never does. If the window glows, the glow
+falls from the tab into the window.
 
 ### Glow
 

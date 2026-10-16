@@ -128,7 +128,7 @@ void CTitleDeco::damageEntire() {
     // the tab's inverted corners reach out by at most half its height on each side
     const auto BOX = pillBoxGlobal(PWINDOW);
     if (BOX.w > 0 && BOX.h > 0)
-        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + (m_inside ? BOX.h / 2.0 : glowReach())));
+        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + std::max(m_inside ? BOX.h / 2.0 : 0.0, glowReach())));
 }
 
 void CTitleDeco::setLabel(SLabel&& label) {
@@ -364,9 +364,10 @@ void CTitleDeco::renderPass(PHLMONITOR pMonitor, const float& a) {
     if (m_inside) {
         // bottom corners like the window's, capped so short tabs stay tabs
         const int R = std::round(std::min(std::max<double>(PWINDOW->rounding(), 3.0), box.h / 2.0 / SCALE) * SCALE);
+        renderGlow(PWINDOW, pMonitor, box, R, a);
         renderTab(box, backgroundColor(PWINDOW), R, a);
     } else {
-        renderGlow(PWINDOW, pMonitor, box, a);
+        renderGlow(PWINDOW, pMonitor, box, std::floor(box.h / 2.0), a);
 
         CHyprColor bg = backgroundColor(PWINDOW);
         bg.a *= a;
@@ -380,7 +381,7 @@ void CTitleDeco::renderPass(PHLMONITOR pMonitor, const float& a) {
     g_pHyprOpenGL->renderTexture(m_textTex, textBox, {.a = a});
 }
 
-void CTitleDeco::renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBox, float a) {
+void CTitleDeco::renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBox, int round, float a) {
     // the same checks the window's own shadow makes, so the pill glows exactly when the
     // window does: inactive windows with a transparent shadow color get none
     const auto GLOW = glowConfig();
@@ -394,8 +395,13 @@ void CTitleDeco::renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBo
     const float SCALE = pMonitor->m_scale;
     const int   RANGE = std::round(GLOW.range * SCALE);
 
-    CBox        box = pillBox;
-    box.expand(RANGE).scaleFromCenter(GLOW.scale).translate(GLOW.offset * SCALE).round();
+    // inside, the glow falls into the window straight down from the tab, so the
+    // shadow's offset and scale, meant for the outside, don't apply
+    CBox box = pillBox;
+    box.expand(RANGE);
+    if (!m_inside)
+        box.scaleFromCenter(GLOW.scale).translate(GLOW.offset * SCALE);
+    box.round();
     if (box.w < 1 || box.h < 1)
         return;
 
@@ -406,19 +412,33 @@ void CTitleDeco::renderGlow(PHLWINDOW w, PHLMONITOR pMonitor, const CBox& pillBo
             w->m_realShadowColorPrevious.m_angle = grad.m_angle;
     }
 
-    // with currentWindow set, the shadow shader cuts the window out, so the glow stays
-    // outside the window like the window's own does and doesn't tint its content
+    // Outside, currentWindow makes the shadow shader cut the window out, so the glow stays
+    // outside like the window's own does. Inside it is the reverse: clipped to the window.
     auto&      renderData = g_pHyprRenderer->m_renderData;
-    const auto PREV       = renderData.currentWindow;
-    renderData.currentWindow = m_window;
+    const auto PREVWINDOW = renderData.currentWindow;
+    const auto PREVCLIP   = renderData.clipBox;
 
-    const int ROUND = std::floor(pillBox.h / 2.0);
+    if (m_inside) {
+        CBox       clip       = w->getWindowMainSurfaceBox();
+        const auto PWORKSPACE = w->m_workspace;
+        if (PWORKSPACE && !w->m_pinned)
+            clip.translate(PWORKSPACE->m_renderOffset->value());
+        clip.translate(w->m_floatingOffset - pMonitor->m_position).scale(SCALE).round();
+        if (PREVCLIP.width != 0 && PREVCLIP.height != 0)
+            clip = clip.intersection(PREVCLIP);
+        if (clip.w < 1 || clip.h < 1)
+            return;
+        renderData.clipBox = clip;
+    } else
+        renderData.currentWindow = m_window;
+
     if (FADING)
-        g_pHyprRenderer->drawShadow(box, ROUND, 2.F, RANGE, w->m_realShadowColorPrevious, grad, w->m_shadowFadeAnimationProgress->value(), a);
+        g_pHyprRenderer->drawShadow(box, round, 2.F, RANGE, w->m_realShadowColorPrevious, grad, w->m_shadowFadeAnimationProgress->value(), a);
     else
-        g_pHyprRenderer->drawShadow(box, ROUND, 2.F, RANGE, grad, a);
+        g_pHyprRenderer->drawShadow(box, round, 2.F, RANGE, grad, a);
 
-    renderData.currentWindow = PREV;
+    renderData.currentWindow = PREVWINDOW;
+    renderData.clipBox       = PREVCLIP;
 }
 
 bool CTitleDeco::wantsInside(PHLWINDOW w) {
