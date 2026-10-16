@@ -1,0 +1,8 @@
+#!/bin/bash
+# Rebuild hyprpm plugins (hyprtitles included) against the Hyprland that `omarchy update` just installed.
+# Lives in ~/.config/omarchy/hooks/post-update.d/
+
+if command -v hyprpm >/dev/null; then
+  hyprpm update -n || notify-send -u critical "hyprpm update failed" "Hyprland plugins were not rebuilt; window titles stay off until fixed."
+  hyprpm reload -n
+fi
