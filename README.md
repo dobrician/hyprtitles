@@ -9,6 +9,14 @@ The text comes from a Lua function in your config, so you decide what each
 window shows: lowercase, uppercase, title case, cut to a length, a different
 label per app, or no pill at all.
 
+![hyprtitles on tokyo-night](assets/screenshots/1-top-right-tokyo-night.png)
+
+![Positions and modes up close](assets/closeups.png)
+
+More in [`assets/screenshots`](assets/screenshots), one per Omarchy theme
+(tokyo-night, catppuccin, gruvbox, rose-pine, kanagawa, osaka-jade), and all of
+them side by side in [`assets/overview.jpg`](assets/overview.jpg).
+
 Built for Hyprland 0.56 with the Lua config (Omarchy). The rendering is adapted
 from [hyprbars](https://github.com/hyprwm/hyprland-plugins/tree/main/hyprbars).
 
