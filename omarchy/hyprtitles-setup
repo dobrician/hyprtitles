@@ -65,6 +65,15 @@ offer_config() {
   fi
 }
 
+# one hyprpm run at a time: the service may open a rebuild while one is already going
+case ${1:-} in
+install | rebuild | uninstall)
+  mkdir -p "$STATE"
+  exec 9>"$STATE/lock"
+  flock 9
+  ;;
+esac
+
 case ${1:-} in
 ensure)
   if ! registered; then
