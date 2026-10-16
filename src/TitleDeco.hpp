@@ -20,6 +20,31 @@ struct SLabel {
     bool                      operator==(const SLabel&) const = default;
 };
 
+enum eEdge : uint8_t {
+    EDGE_TOP,
+    EDGE_BOTTOM,
+    EDGE_LEFT,
+    EDGE_RIGHT,
+};
+
+enum eAlong : uint8_t {
+    ALONG_START, // left on a horizontal edge, top on a vertical one
+    ALONG_CENTER,
+    ALONG_END,
+};
+
+// where the label sits: which edge of the window, and where along it
+struct SPlacement {
+    eEdge  edge  = EDGE_TOP;
+    eAlong along = ALONG_END;
+
+    bool   vertical() const {
+        return edge == EDGE_LEFT || edge == EDGE_RIGHT;
+    }
+};
+
+SPlacement placement();
+
 // how far the pill glow reaches past the pill (logical px), 0 without a glow
 double glowReach();
 
@@ -85,7 +110,7 @@ class CTitleDeco : public IHyprWindowDecoration {
     void       ensureTexture(PHLWINDOW w, float scale);
     CBox       pillBoxGlobal(PHLWINDOW w);
     bool       wantsInside(PHLWINDOW w);
-    void       renderTab(const CBox& body, const CHyprColor& color, int r, float a);
+    void       renderTab(const CBox& body, const SPlacement& place, const CHyprColor& color, int r, float a);
     double     overhang();
 
     void       renderPass(PHLMONITOR, float const& a);

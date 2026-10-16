@@ -38,7 +38,7 @@ struct SGlobalState {
 
     struct {
         SP<Config::Values::CBoolValue>       enabled, showFullscreen, onlyActive, glow;
-        SP<Config::Values::CStringValue>     font, align, inside;
+        SP<Config::Values::CStringValue>     font, align, position, inside;
         SP<Config::Values::CIntValue>        textSize, paddingX, paddingY, maxWidth, offsetX, offsetY;
         SP<Config::Values::CFontWeightValue> textWeight;
         SP<Config::Values::CColorValue>      activeBg, inactiveBg, activeText, inactiveText;

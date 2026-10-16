@@ -58,9 +58,9 @@ hl.config({ plugin = { hyprtitles = {
   padding_x = 8,
   padding_y = 1,
   max_width = 400,         -- longer text is cut with "…"; 0 = window width
+  position = "top_right",  -- see below
   offset_x = 12,           -- distance from the rounded corner
-  offset_y = 0,            -- vertical shift from the border line, positive is down
-  align = "right",         -- right, left, center
+  offset_y = 0,            -- shift from the border line, positive is into the window
   col = {
     active_bg = 0,         -- 0 = the window's border color
     inactive_bg = 0,
@@ -74,18 +74,33 @@ hl.config({ plugin = { hyprtitles = {
 } } })
 ```
 
-### No room above
+### Position
 
-When there is no room above a window, because it touches the top of the screen
-or a bar, or a tiled window sits right above it with no gaps, the label moves
-inside the window: a tab hanging from the top border, rounded at the bottom
-and joined to the border with inner curves. `inside = "always"` always draws
+`position` is the edge, then where along it:
+
+- `top_right`, `top_left`, `top_center`
+- `bottom_right`, `bottom_left`, `bottom_center`
+- `left_top`, `left_bottom`, `left_center`
+- `right_top`, `right_bottom`, `right_center`
+
+On the left and right edges the text runs along the edge, bottom to top on the
+left and top to bottom on the right. Spaces or dashes work too (`"left top"`).
+Left empty, the label goes on the top edge, placed by the older
+`align = "right" | "left" | "center"`.
+
+### No room past the edge
+
+When there is no room past the label's edge, because the window touches the
+edge of the screen or a bar, or a tiled window sits right next to it with no
+gaps, the label moves inside the window: a tab hanging from the border, rounded
+at its free end and joined to the border with inner curves. `inside = "always"` always draws
 it that way, `inside = "never"` never does. If the window glows, the glow
 falls from the tab into the window.
 
 ### Glow
 
-If your windows glow (`decoration:shadow`), the pill gets the same glow: same
+The pill glows only when its window glows (`decoration:shadow`), with the
+same glow: same
 color, range, power, offset and fade, and only when the window has one, so a
 transparent `color_inactive` means no glow on inactive pills. Like the window's
 own glow, it stays outside the window. `glow = false` turns it off; a `sharp`

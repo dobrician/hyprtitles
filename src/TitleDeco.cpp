@@ -79,15 +79,86 @@ CTitleDeco::~CTitleDeco() {
         std::erase(g_pGlobalState->decos, m_self);
 }
 
+SPlacement placement() {
+    // "top_right", "left bottom", "bottom-center", ...: the edge, then where along it
+    auto pos = g_pGlobalState->config.position->value();
+    std::ranges::replace(pos, '-', '_');
+    std::ranges::replace(pos, ' ', '_');
+
+    SPlacement p;
+    if (pos.empty()) {
+        // before `position` there was only `align`, on the top edge
+        const auto ALIGN = g_pGlobalState->config.align->value();
+        p.along          = ALIGN == "left" ? ALONG_START : ALIGN == "center" ? ALONG_CENTER : ALONG_END;
+        return p;
+    }
+
+    const auto SEP  = pos.find('_');
+    const auto EDGE = pos.substr(0, SEP);
+    const auto AT   = SEP == std::string::npos ? std::string{"center"} : pos.substr(SEP + 1);
+
+    p.edge = EDGE == "bottom" ? EDGE_BOTTOM : EDGE == "left" ? EDGE_LEFT : EDGE == "right" ? EDGE_RIGHT : EDGE_TOP;
+    if (p.vertical())
+        p.along = AT == "top" ? ALONG_START : AT == "bottom" ? ALONG_END : ALONG_CENTER;
+    else
+        p.along = AT == "left" ? ALONG_START : AT == "right" ? ALONG_END : ALONG_CENTER;
+    return p;
+}
+
+// The label's box for a window box `wb` (logical px). `len` runs along the edge and
+// `thick` across it. Outside, the label is centered on the border line, shifted inward
+// by offset_y; inside, it hangs from the border's inner edge.
+static CBox placeBox(const CBox& wb, double border, double rounding, double len, double thick, const SPlacement& p, bool inside) {
+    const double OFFALONG  = std::max<Config::INTEGER>(0, g_pGlobalState->config.offsetX->value());
+    const double OFFACROSS = g_pGlobalState->config.offsetY->value();
+    const double SPAN      = p.vertical() ? wb.h : wb.w;
+    const double ORIGIN    = p.vertical() ? wb.y : wb.x;
+
+    double       along = 0;
+    switch (p.along) {
+        case ALONG_START: along = ORIGIN + rounding + OFFALONG; break;
+        case ALONG_END: along = ORIGIN + SPAN - rounding - OFFALONG - len; break;
+        case ALONG_CENTER: along = ORIGIN + (SPAN - len) / 2.0; break;
+    }
+
+    double across = 0;
+    switch (p.edge) {
+        case EDGE_TOP: across = inside ? wb.y : wb.y - border / 2.0 - thick / 2.0 + OFFACROSS; break;
+        case EDGE_BOTTOM: across = inside ? wb.y + wb.h - thick : wb.y + wb.h + border / 2.0 - thick / 2.0 - OFFACROSS; break;
+        case EDGE_LEFT: across = inside ? wb.x : wb.x - border / 2.0 - thick / 2.0 + OFFACROSS; break;
+        case EDGE_RIGHT: across = inside ? wb.x + wb.w - thick : wb.x + wb.w + border / 2.0 - thick / 2.0 - OFFACROSS; break;
+    }
+
+    return p.vertical() ? CBox{across, along, thick, len} : CBox{along, across, len, thick};
+}
+
 SDecorationPositioningInfo CTitleDeco::getPositioningInfo() {
     // Absolute and non-solid: the pill overlaps the border and reserves no space, so the
     // layout and the other decorations stay where they are. The extents only widen the
-    // window's damage box so the part of the pill above the border gets repainted.
+    // window's damage box so the part of the pill past the border gets repainted.
     SDecorationPositioningInfo info;
-    info.policy         = DECORATION_POSITION_ABSOLUTE;
-    info.edges          = DECORATION_EDGE_TOP;
-    info.reserved       = false;
-    info.desiredExtents = {Vector2D{0.0, overhang()}, Vector2D{0.0, 0.0}};
+    info.policy   = DECORATION_POSITION_ABSOLUTE;
+    info.reserved = false;
+
+    const double O = overhang();
+    switch (placement().edge) {
+        case EDGE_TOP:
+            info.edges          = DECORATION_EDGE_TOP;
+            info.desiredExtents = {Vector2D{0.0, O}, Vector2D{0.0, 0.0}};
+            break;
+        case EDGE_BOTTOM:
+            info.edges          = DECORATION_EDGE_BOTTOM;
+            info.desiredExtents = {Vector2D{0.0, 0.0}, Vector2D{0.0, O}};
+            break;
+        case EDGE_LEFT:
+            info.edges          = DECORATION_EDGE_LEFT;
+            info.desiredExtents = {Vector2D{O, 0.0}, Vector2D{0.0, 0.0}};
+            break;
+        case EDGE_RIGHT:
+            info.edges          = DECORATION_EDGE_RIGHT;
+            info.desiredExtents = {Vector2D{0.0, 0.0}, Vector2D{O, 0.0}};
+            break;
+    }
     return info;
 }
 
@@ -125,10 +196,10 @@ void CTitleDeco::damageEntire() {
     if (!PWINDOW || !validMapped(PWINDOW))
         return;
 
-    // the tab's inverted corners reach out by at most half its height on each side
+    // the tab's inverted corners reach out by at most half its thickness on each side
     const auto BOX = pillBoxGlobal(PWINDOW);
     if (BOX.w > 0 && BOX.h > 0)
-        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + std::max(m_inside ? BOX.h / 2.0 : 0.0, glowReach())));
+        g_pHyprRenderer->damageBox(BOX.copy().expand(2 + std::max(m_inside ? std::min(BOX.w, BOX.h) / 2.0 : 0.0, glowReach())));
 }
 
 void CTitleDeco::setLabel(SLabel&& label) {
@@ -228,13 +299,14 @@ CHyprColor CTitleDeco::textColor(PHLWINDOW w) {
 }
 
 int CTitleDeco::maxTextWidth(PHLWINDOW w) {
-    // logical px available for the text: the window's top edge minus the rounded corners,
+    // logical px available for the text: the window's edge minus the rounded corners,
     // the offset from the corner and the pill padding, capped by max_width
     const auto   WINBOX   = w->getWindowMainSurfaceBox();
     const double ROUNDING = w->rounding();
     const double OFFSET   = std::max<Config::INTEGER>(0, g_pGlobalState->config.offsetX->value());
     const double PADDING  = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingX->value());
-    double       avail    = WINBOX.w - 2 * ROUNDING - 2 * OFFSET - 2 * PADDING;
+    const double SPAN     = placement().vertical() ? WINBOX.h : WINBOX.w;
+    double       avail    = SPAN - 2 * ROUNDING - 2 * OFFSET - 2 * PADDING;
 
     const auto   MAXW = g_pGlobalState->config.maxWidth->value();
     if (MAXW > 0)
@@ -281,7 +353,7 @@ void CTitleDeco::ensureTexture(PHLWINDOW w, float scale) {
 }
 
 double CTitleDeco::overhang() {
-    // how far the pill reaches above the window's main surface (logical px)
+    // how far the pill reaches past the window's main surface on its edge (logical px)
     const auto PWINDOW = m_window.lock();
     if (!PWINDOW)
         return 0;
@@ -297,30 +369,13 @@ CBox CTitleDeco::pillBoxGlobal(PHLWINDOW w) {
     if (!m_textTex || m_texKey.scale <= 0)
         return {};
 
-    const auto   WINBOX   = w->getWindowMainSurfaceBox();
-    const double SCALE    = m_texKey.scale;
-    const double PADX     = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingX->value());
-    const double PADY     = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingY->value());
-    const double OFFSET   = std::max<Config::INTEGER>(0, g_pGlobalState->config.offsetX->value());
-    const double ROUNDING = w->rounding();
-    const double BORDER   = w->getRealBorderSize();
+    const double SCALE = m_texKey.scale;
+    const double PADX  = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingX->value());
+    const double PADY  = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingY->value());
+    const double LEN   = m_textTex->m_size.x / SCALE + 2 * PADX;
+    const double THICK = m_textTex->m_size.y / SCALE + 2 * PADY;
 
-    const double PILLW = m_textTex->m_size.x / SCALE + 2 * PADX;
-    const double PILLH = m_textTex->m_size.y / SCALE + 2 * PADY;
-
-    // vertically centered on the top border line, or, inside, hanging from its inner edge
-    const double Y = m_inside ? WINBOX.y : WINBOX.y - BORDER / 2.0 - PILLH / 2.0 + g_pGlobalState->config.offsetY->value();
-
-    double       x     = 0;
-    const auto   ALIGN = g_pGlobalState->config.align->value();
-    if (ALIGN == "left")
-        x = WINBOX.x + ROUNDING + OFFSET;
-    else if (ALIGN == "center")
-        x = WINBOX.x + (WINBOX.w - PILLW) / 2.0;
-    else
-        x = WINBOX.x + WINBOX.w - ROUNDING - OFFSET - PILLW;
-
-    CBox       box = {x, Y, PILLW, PILLH};
+    CBox         box = placeBox(w->getWindowMainSurfaceBox(), w->getRealBorderSize(), w->rounding(), LEN, THICK, placement(), m_inside);
 
     const auto PWORKSPACE = w->m_workspace;
     if (PWORKSPACE && !w->m_pinned)
@@ -361,21 +416,30 @@ void CTitleDeco::renderPass(PHLMONITOR pMonitor, const float& a) {
     if (box.w < 1 || box.h < 1)
         return;
 
+    const auto   PLACE = placement();
+    const double THICK = PLACE.vertical() ? box.w : box.h;
+
     if (m_inside) {
-        // bottom corners like the window's, capped so short tabs stay tabs
-        const int R = std::round(std::min(std::max<double>(PWINDOW->rounding(), 3.0), box.h / 2.0 / SCALE) * SCALE);
+        // free corners like the window's, capped so short tabs stay tabs
+        const int R = std::round(std::min(std::max<double>(PWINDOW->rounding(), 3.0), THICK / 2.0 / SCALE) * SCALE);
         renderGlow(PWINDOW, pMonitor, box, R, a);
-        renderTab(box, backgroundColor(PWINDOW), R, a);
+        renderTab(box, PLACE, backgroundColor(PWINDOW), R, a);
     } else {
-        renderGlow(PWINDOW, pMonitor, box, std::floor(box.h / 2.0), a);
+        renderGlow(PWINDOW, pMonitor, box, std::floor(THICK / 2.0), a);
 
         CHyprColor bg = backgroundColor(PWINDOW);
         bg.a *= a;
 
-        g_pHyprOpenGL->renderRect(box, bg, {.round = static_cast<int>(std::floor(box.h / 2.0)), .roundingPower = 2.F});
+        g_pHyprOpenGL->renderRect(box, bg, {.round = static_cast<int>(std::floor(THICK / 2.0)), .roundingPower = 2.F});
     }
 
-    CBox textBox = {box.x + (box.w - m_textTex->m_size.x) / 2.0, box.y + (box.h - m_textTex->m_size.y) / 2.0, m_textTex->m_size.x, m_textTex->m_size.y};
+    // on the side edges the text runs along the edge, read from the outside of the
+    // window: bottom to top on the left, top to bottom on the right
+    const auto TEXT    = m_textTex->m_size;
+    const auto TEXTDIM = PLACE.vertical() ? Vector2D{TEXT.y, TEXT.x} : TEXT;
+    m_textTex->m_transform = PLACE.edge == EDGE_LEFT ? HYPRUTILS_TRANSFORM_90 : PLACE.edge == EDGE_RIGHT ? HYPRUTILS_TRANSFORM_270 : HYPRUTILS_TRANSFORM_NORMAL;
+
+    CBox textBox = {box.x + (box.w - TEXTDIM.x) / 2.0, box.y + (box.h - TEXTDIM.y) / 2.0, TEXTDIM.x, TEXTDIM.y};
     textBox.round(); // whole pixels, otherwise the text is sampled at a half-pixel offset and blurs
 
     g_pHyprOpenGL->renderTexture(m_textTex, textBox, {.a = a});
@@ -454,50 +518,60 @@ bool CTitleDeco::wantsInside(PHLWINDOW w) {
 
     // Decide on where the window is going, not where it is mid-animation, so the label
     // doesn't flip between the two places while a window slides or resizes.
-    const auto   GOAL   = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
-    const double BORDER = w->getRealBorderSize();
-    const double PADY   = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingY->value());
-    const double PILLH  = m_textTex->m_size.y / m_texKey.scale + 2 * PADY;
-    const double TOP    = GOAL.y - BORDER / 2.0 - PILLH / 2.0 + g_pGlobalState->config.offsetY->value();
+    const auto   GOAL  = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+    const auto   PLACE = placement();
+    const double PADX  = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingX->value());
+    const double PADY  = std::max<Config::INTEGER>(0, g_pGlobalState->config.paddingY->value());
+    const double LEN   = m_textTex->m_size.x / m_texKey.scale + 2 * PADX;
+    const double THICK = m_textTex->m_size.y / m_texKey.scale + 2 * PADY;
+    const auto   OUT   = placeBox(GOAL, w->getRealBorderSize(), w->rounding(), LEN, THICK, PLACE, false);
 
-    // past the top of the usable area: off screen, or over a bar
-    if (TOP < PMONITOR->logicalBoxMinusReserved().y)
-        return true;
+    // past the usable area on that side: off screen, or over a bar
+    const auto WORK = PMONITOR->logicalBoxMinusReserved();
+    switch (PLACE.edge) {
+        case EDGE_TOP:
+            if (OUT.y < WORK.y)
+                return true;
+            break;
+        case EDGE_BOTTOM:
+            if (OUT.y + OUT.h > WORK.y + WORK.h)
+                return true;
+            break;
+        case EDGE_LEFT:
+            if (OUT.x < WORK.x)
+                return true;
+            break;
+        case EDGE_RIGHT:
+            if (OUT.x + OUT.w > WORK.x + WORK.w)
+                return true;
+            break;
+    }
 
     if (w->m_isFloating)
         return false;
 
-    // over a tiled neighbour right above (gaps smaller than half the pill)
-    const auto   CUR    = pillBoxGlobal(w);
-    const double OFFX   = CUR.x - w->getWindowMainSurfaceBox().x;
-    const double LEFT   = GOAL.x + OFFX;
-    const double RIGHT  = LEFT + CUR.w;
-
+    // over a tiled neighbour on that side (gaps smaller than half the pill); tiled
+    // windows don't overlap, so whatever the label would cover is on its side
     for (const auto& other : Desktop::windowState()->windows()) {
         if (other == w || !other->m_isMapped || other->isHidden() || other->m_isFloating || other->m_workspace != w->m_workspace)
             continue;
 
-        const auto   OB      = other->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
-        const double OBORDER = other->getRealBorderSize();
-        const double BOTTOM  = OB.y + OB.h + OBORDER;
-
-        if (OB.y >= GOAL.y || BOTTOM <= TOP)
-            continue;
-        if (OB.x - OBORDER >= RIGHT || OB.x + OB.w + OBORDER <= LEFT)
-            continue;
-
-        return true;
+        const auto OB = other->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL).expand(other->getRealBorderSize());
+        if (const auto HIT = OB.intersection(OUT); HIT.w > 0 && HIT.h > 0)
+            return true;
     }
 
     return false;
 }
 
-void CTitleDeco::renderTab(const CBox& body, const CHyprColor& color, int r, float a) {
-    // The tab hangs from the top border: flat on top, rounded at the bottom, and joined
-    // to the border by inverted corners of the same radius on either side. Drawn with
-    // cairo once per size and color; only a border color fade redraws it per frame.
-    const int W = std::round(body.w) + 2 * r;
-    const int H = std::round(body.h);
+void CTitleDeco::renderTab(const CBox& body, const SPlacement& place, const CHyprColor& color, int r, float a) {
+    // The tab hangs from the border: flat where it meets it, rounded at the free end, and
+    // joined to the border by inverted corners of the same radius on either side. Drawn
+    // with cairo hanging from a top border, once per size and color (only a border color
+    // fade redraws it per frame), and turned to the label's edge when rendered.
+    const bool VERT = place.vertical();
+    const int  W    = std::round(VERT ? body.h : body.w) + 2 * r;
+    const int  H    = std::round(VERT ? body.w : body.h);
     if (W < 1 || H < 1)
         return;
 
@@ -534,5 +608,13 @@ void CTitleDeco::renderTab(const CBox& body, const CHyprColor& color, int r, flo
     if (!m_tabTex || m_tabTex->m_texID == 0)
         return;
 
-    g_pHyprOpenGL->renderTexture(m_tabTex, CBox{body.x - r, body.y, (double)W, (double)H}, {.a = a});
+    switch (place.edge) {
+        case EDGE_TOP: m_tabTex->m_transform = HYPRUTILS_TRANSFORM_NORMAL; break;
+        case EDGE_BOTTOM: m_tabTex->m_transform = HYPRUTILS_TRANSFORM_180; break;
+        case EDGE_LEFT: m_tabTex->m_transform = HYPRUTILS_TRANSFORM_90; break;
+        case EDGE_RIGHT: m_tabTex->m_transform = HYPRUTILS_TRANSFORM_270; break;
+    }
+
+    const CBox DEST = VERT ? CBox{body.x, body.y - r, (double)H, (double)W} : CBox{body.x - r, body.y, (double)W, (double)H};
+    g_pHyprOpenGL->renderTexture(m_tabTex, DEST, {.a = a});
 }

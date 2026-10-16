@@ -90,7 +90,7 @@ if hl.plugin.hyprtitles ~= nil then
         padding_y = 1,
         max_width = 400,
         offset_x = 12,
-        align = "right", -- right, left or center
+        position = "top_right", -- top_/bottom_ right|left|center, left_/right_ top|bottom|center
         -- 0 = follow the window's border color / auto contrast text
         -- col = { active_bg = "rgb(f5a3c7)", inactive_bg = 0, active_text = 0, inactive_text = 0 },
         show_fullscreen = false,
