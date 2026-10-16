@@ -100,10 +100,9 @@ falls from the tab into the window.
 ### Glow
 
 The pill glows only when its window glows (`decoration:shadow`), with the
-same glow: same
-color, range, power, offset and fade, and only when the window has one, so a
-transparent `color_inactive` means no glow on inactive pills. Like the window's
-own glow, it stays outside the window. `glow = false` turns it off; a `sharp`
+same color, range, power, offset and fade. A transparent `color_inactive`
+means no glow on inactive windows, so none on their pills either. Like the
+window's own glow, it stays outside the window. `glow = false` turns it off; a `sharp`
 shadow is not copied.
 
 ### What the pill says
