@@ -33,6 +33,11 @@ static CHyprColor firstColor(const Config::CGradientValueData& grad) {
     return grad.m_colors.empty() ? CHyprColor{0.5F, 0.5F, 0.5F, 1.F} : grad.m_colors.front();
 }
 
+static CHyprColor opaque(CHyprColor c) {
+    c.a = 1.F;
+    return c;
+}
+
 static bool hasAlpha(const Config::CGradientValueData& grad) {
     return std::ranges::any_of(grad.m_colors, [](const auto& c) { return c.a > 0.001F; });
 }
@@ -268,10 +273,12 @@ CHyprColor CTitleDeco::backgroundColor(PHLWINDOW w) {
     if (CONFIGURED != 0)
         return configColor(CONFIGURED);
 
-    // follow the border, including its active <-> inactive fade
-    const auto CURRENT = firstColor(w->m_realBorderColor);
+    // follow the border, including its active <-> inactive fade, but opaque: themes often
+    // give the inactive border some transparency, which on a pill leaves the text floating
+    // over whatever is behind it
+    const auto CURRENT = opaque(firstColor(w->m_realBorderColor));
     if (w->m_borderFadeAnimationProgress && w->m_borderFadeAnimationProgress->isBeingAnimated())
-        return lerpColor(firstColor(w->m_realBorderColorPrevious), CURRENT, w->m_borderFadeAnimationProgress->value());
+        return lerpColor(opaque(firstColor(w->m_realBorderColorPrevious)), CURRENT, w->m_borderFadeAnimationProgress->value());
 
     return CURRENT;
 }

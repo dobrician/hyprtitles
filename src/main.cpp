@@ -332,7 +332,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     // re-run the config so plugin:hyprtitles values and the label callback apply
     HyprlandAPI::reloadConfig();
 
-    return {"hyprtitles", "Window titles in a pill on the window border.", "Ciprian Dobrea", "0.2.0"};
+    return {"hyprtitles", "Window titles in a pill on the window border.", "Ciprian Dobrea", "0.2.1"};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {

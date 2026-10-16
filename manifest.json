@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "dc.hyprtitles",
   "name": "hyprtitles",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Ciprian Dobrea",
   "description": "Window titles in a pill on the window border. Follows your theme and glow, sits on any edge, turns into tabs when there is no room, and takes its text from a Lua function.",
   "kinds": [
